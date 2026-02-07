@@ -22,3 +22,12 @@ model Provider {
 
   @@map("providers")
 }
+
+model Job {
+  id          String   @id
+  language    String
+  status      String   // PENDING | ASSIGNED | RUNNING | COMPLETED | FAILED
+  createdAt   DateTime @default(now())
+  assignedTo  String?
+}
+
