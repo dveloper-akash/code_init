@@ -96,6 +96,63 @@ def get_network_usage():
         "download_kb_per_sec": round(download_speed, 2)
     }
 
+def calculate_cpu_share(cpu_info):
+    current_usage = cpu_info["cpu_usage_percent"]
+    total_cores = cpu_info["total_cores"]
+
+    if current_usage > 70:
+        return 0
+
+    max_allowed_percent = 60
+    share_percent = max_allowed_percent - current_usage
+
+    if share_percent <= 0:
+        return 0
+
+    share_cores = round((share_percent / 100) * total_cores, 2)
+
+    return share_cores
+
+def calculate_memory_share(memory_info):
+    available = memory_info["available_memory_gb"]
+
+    reserve_gb = 4
+
+    if available <= reserve_gb:
+        return 0
+
+    return round(available - reserve_gb, 2)
+
+def calculate_gpu_share(gpu_info):
+    shareable_gpus = []
+
+    for gpu in gpu_info:
+        if gpu["free_memory_gb"] > 2:
+            shareable_gpus.append(gpu)
+
+    return shareable_gpus
+
+def calculate_bandwidth_share(network_info):
+    current_upload = network_info["upload_kb_per_sec"]
+    current_download = network_info["download_kb_per_sec"]
+
+    max_upload_limit = 5000  # Assume 5MB/s safe upper limit
+    max_download_limit = 5000
+
+    upload_available = max_upload_limit - current_upload
+    download_available = max_download_limit - current_download
+
+    if upload_available < 0:
+        upload_available = 0
+
+    if download_available < 0:
+        download_available = 0
+
+    return {
+        "upload_kb_per_sec": round(upload_available * 0.5, 2),
+        "download_kb_per_sec": round(download_available * 0.5, 2)
+    }
+
 def shutdown_handler(signum, frame):
     logging.info("Shutting down provider agent...")
     sys.exit(0)
@@ -113,10 +170,14 @@ def main():
         gpu = get_gpu_info()
         network = get_network_usage()
 
-        logging.info(f"CPU: {cpu}")
-        logging.info(f"Memory: {memory}")
-        logging.info(f"GPU: {gpu}")
-        logging.info(f"Network: {network}")
+        offer = {
+            "cpu_cores": calculate_cpu_share(cpu),
+            "memory_gb": calculate_memory_share(memory),
+            "gpu": calculate_gpu_share(gpu),
+            "bandwidth": calculate_bandwidth_share(network)
+        }
+        
+        logging.info(f"Offerable Resources: {offer}")
 
         time.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
