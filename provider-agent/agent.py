@@ -4,6 +4,7 @@ import signal
 import sys
 import psutil
 import GPUtil
+import subprocess
 
 AGENT_NAME = "GridX Provider Agent"
 AGENT_VERSION = "0.1"
@@ -14,6 +15,24 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
+
+REQUIRED_IMAGES = [
+    "thengax/runtime-python",
+    "thengax/runtime-node",
+    "thengax/runtime-go"
+]
+
+def check_docker():
+    try:
+        subprocess.run(["docker", "--version"], check=True)
+        print("Docker installed.")
+    except:
+        raise Exception("Docker not installed on this system.")
+
+def pull_images():
+    for image in REQUIRED_IMAGES:
+        print(f"Pulling {image}...")
+        subprocess.run(["docker", "pull", image], check=True)
 
 def get_cpu_info():
     total_cores = psutil.cpu_count(logical=True)
@@ -182,4 +201,6 @@ def main():
         time.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
 if __name__ == "__main__":
+    check_docker()
+    pull_images()
     main()
