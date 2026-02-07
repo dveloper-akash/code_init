@@ -95,7 +95,9 @@ export async function getAvailableProviders(job) {
 
         // safety margins (IMPORTANT)
         if (m.freeRamMB < job.memoryMB * 1.5) continue;
-        if (m.cpuUsage > 85) continue;
+        if (m.availCpuCores < job.cpuCores) continue;
+        if (m.gpu!==job.gpu ) continue;
+        if (m.gpuFree<job.gpuMemoryMB) continue;
       }
     }
 

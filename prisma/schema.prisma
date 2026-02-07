@@ -13,9 +13,9 @@ model Provider {
   revoked     Boolean  @default(false)
 
   // Capability metadata (SQLite-safe)
-  languages   Json
+  languages   Json?
   maxTimeout  Int
-  labels      Json
+  labels      Json?
 
   createdAt   DateTime @default(now())
   lastSeenAt  DateTime?
