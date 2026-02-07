@@ -1,10 +1,13 @@
 import axios from "axios";
 
-export async function analyzeJob(code) {
+const API_KEY = process.env.OPENROUTER_TOKEN;
+
+export async function aiAnalyzer(code) {
   const systemPrompt = `
 You are a strict job execution planner.
-You MUST return ONLY valid JSON.
+Return ONLY valid JSON.
 No explanations.
+No markdown.
 `;
 
   const userPrompt = `
@@ -26,48 +29,32 @@ Code:
 ${code}
 `;
 
-  let res;
-
-  try {
-    res = await axios.post(
-      "https://models.inference.ai.azure.com",
-      {
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 15000,
+  const response = await axios.post(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      model: "openrouter/free",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: 0
+    },
+    {
+      headers: {
+        "Authorization": `Bearer ${API_KEY}`,
+        "Content-Type": "application/json"
       }
-    );
-  } catch (err) {
-    console.error("AI API error:", err.response?.data || err.message);
-    throw new Error("AI planner request failed");
-  }
+    }
+  );
 
-  const raw = res.data.choices?.[0]?.message?.content;
-
-  if (!raw) {
-    throw new Error("Empty AI response");
-  }
+  const raw = response.data.choices?.[0]?.message?.content;
+  if (!raw) throw new Error("Empty response");
 
   const cleaned = raw
-    .trim()
     .replace(/^```json/, "")
     .replace(/^```/, "")
-    .replace(/```$/, "");
+    .replace(/```$/, "")
+    .trim();
 
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    console.error("Invalid JSON from AI:", cleaned);
-    throw new Error("AI returned invalid JSON");
-  }
+  return JSON.parse(cleaned);
 }
