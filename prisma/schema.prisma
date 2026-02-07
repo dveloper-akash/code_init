@@ -1,0 +1,24 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Provider {
+  id          String   @id
+  name        String?
+  revoked     Boolean  @default(false)
+
+  // Capability metadata (SQLite-safe)
+  languages   Json
+  maxTimeout  Int
+  labels      Json
+
+  createdAt   DateTime @default(now())
+  lastSeenAt  DateTime?
+
+  @@map("providers")
+}
