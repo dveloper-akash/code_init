@@ -6,12 +6,16 @@ import psutil
 import GPUtil
 import subprocess
 import logging
+import socketio
+import eventlet
+import eventlet.wsgi
+
+# ---------------- CONFIG ----------------
 
 SERVER_URL = "http://localhost:5000"
+WS_PORT = 7000
 HEARTBEAT_INTERVAL = 5
 PROVIDER_ID_FILE = ".provider_id"
-
-logging.basicConfig(level=logging.INFO)
 
 REQUIRED_IMAGES = [
     "thengax/runtime-python",
@@ -19,12 +23,9 @@ REQUIRED_IMAGES = [
     "thengax/runtime-go"
 ]
 
-def check_docker():
-    subprocess.run(["docker", "--version"], check=True)
+logging.basicConfig(level=logging.INFO)
 
-def pull_images():
-    for img in REQUIRED_IMAGES:
-        subprocess.run(["docker", "pull", img], check=True)
+# ---------------- UTIL ----------------
 
 def get_provider_id():
     if os.path.exists(PROVIDER_ID_FILE):
@@ -42,10 +43,12 @@ def detect_languages():
         if "go" in img: langs.append("go")
     return langs
 
+# ---------------- BACKEND COMM ----------------
+
 def register_provider(pid):
     payload = {
         "providerId": pid,
-        "address": "ws://localhost:7000",
+        "address": f"ws://localhost:{WS_PORT}",
         "capabilities": {
             "languages": detect_languages(),
             "maxTimeout": 30
@@ -78,19 +81,73 @@ def send_metrics(pid):
         json={ "providerId": pid, "metrics": metrics }
     )
 
-def main():
-    check_docker()
-    pull_images()
+# ---------------- EXECUTION ----------------
 
+def execute_code(language, code):
+    if language == "python":
+        proc = subprocess.run(
+            ["python", "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        return proc.stdout, proc.stderr
+
+    return "", "Unsupported language"
+
+# ---------------- SOCKET SERVER ----------------
+
+sio = socketio.Server(cors_allowed_origins="*")
+app = socketio.WSGIApp(sio)
+
+@sio.event
+def connect(sid, environ):
+    logging.info(f"Client connected: {sid}")
+
+@sio.event
+def disconnect(sid):
+    logging.info(f"Client disconnected: {sid}")
+
+@sio.event
+def job_execute(sid, data):
+    logging.info("Received job")
+
+    code = data.get("code")
+    plan = data.get("plan")
+    language = plan.get("language")
+
+    try:
+        stdout, stderr = execute_code(language, code)
+        sio.emit(
+            "job:result",
+            { "stdout": stdout, "stderr": stderr },
+            to=sid
+        )
+    except Exception as e:
+        sio.emit(
+            "job:result",
+            { "stdout": "", "stderr": str(e) },
+            to=sid
+        )
+
+# ---------------- MAIN ----------------
+
+def main():
     pid = get_provider_id()
     register_provider(pid)
 
     logging.info(f"Provider running: {pid}")
 
-    while True:
-        send_heartbeat(pid)
-        send_metrics(pid)
-        time.sleep(HEARTBEAT_INTERVAL)
+    def background_tasks():
+        while True:
+            send_heartbeat(pid)
+            send_metrics(pid)
+            time.sleep(HEARTBEAT_INTERVAL)
+
+    eventlet.spawn(background_tasks)
+
+    logging.info(f"WebSocket server on port {WS_PORT}")
+    eventlet.wsgi.server(eventlet.listen(("", WS_PORT)), app)
 
 if __name__ == "__main__":
     main()

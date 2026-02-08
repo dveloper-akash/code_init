@@ -1,3 +1,5 @@
+import dotenv from "dotenv";
+dotenv.config();
 import axios from "axios";
 
 const API_KEY = process.env.OPENROUTER_TOKEN;
@@ -32,6 +34,7 @@ ${code}
   const response = await axios.post(
     "https://openrouter.ai/api/v1/chat/completions",
     {
+      // ✅ use a REAL free model
       model: "openrouter/free",
       messages: [
         { role: "system", content: systemPrompt },
@@ -41,20 +44,60 @@ ${code}
     },
     {
       headers: {
-        "Authorization": `Bearer ${API_KEY}`,
+        Authorization: `Bearer ${API_KEY}`,
         "Content-Type": "application/json"
       }
     }
   );
 
-  const raw = response.data.choices?.[0]?.message?.content;
-  if (!raw) throw new Error("Empty response");
+  const raw = response.data?.choices?.[0]?.message?.content;
+  if (!raw) {
+    throw new Error("Empty AI response");
+  }
 
-  const cleaned = raw
-    .replace(/^```json/, "")
-    .replace(/^```/, "")
-    .replace(/```$/, "")
-    .trim();
+  // 🔒 NEVER parse raw AI output directly
+  const extracted = extractJson(raw);
 
-  return JSON.parse(cleaned);
+  // 🔒 Normalize for scheduler safety
+  return normalizePlan(extracted);
+}
+
+/* --------------------------------
+   SAFE JSON EXTRACTION
+--------------------------------- */
+function extractJson(raw) {
+  const match = raw.match(/\{[\s\S]*\}/);
+
+  if (!match) {
+    console.error("AI RAW OUTPUT:\n", raw);
+    throw new Error("AI response does not contain valid JSON");
+  }
+
+  try {
+    return JSON.parse(match[0]);
+  } catch (err) {
+    console.error("INVALID JSON BLOCK:\n", match[0]);
+    throw err;
+  }
+}
+
+/* --------------------------------
+   NORMALIZATION (VERY IMPORTANT)
+--------------------------------- */
+function normalizePlan(plan) {
+  return {
+    language: String(plan.language || "python").toLowerCase(),
+    runtime: plan.runtime || "python3",
+    dependencies: Array.isArray(plan.dependencies)
+      ? plan.dependencies
+      : [],
+    requirements: {
+      minMemoryMB: Math.max(plan.requirements?.minMemoryMB || 256, 256),
+      cpuCores: Math.max(plan.requirements?.cpuCores || 1, 1),
+      gpu: Boolean(plan.requirements?.gpu),
+      gpuMemoryMB: plan.requirements?.gpu
+        ? Math.max(plan.requirements?.gpuMemoryMB || 1024, 1024)
+        : null
+    }
+  };
 }

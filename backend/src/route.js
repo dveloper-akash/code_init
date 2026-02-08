@@ -11,6 +11,6 @@ const router = Router();
 router.use("/providers", providerRoutes);
 
 
-// router.use("/job", jobRoutes);
+router.use("/job", jobRoutes);
 
 export default router;

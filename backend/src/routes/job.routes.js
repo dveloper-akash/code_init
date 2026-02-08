@@ -7,14 +7,18 @@ import { getAvailableProviders } from "../services/providerStore.js";
 const router = Router();
 
 router.post("/submit", async (req, res)=> {
+  const providers = await getAvailableProviders();
+  if (providers.length === 0) {
+    return res.status(503).json({ error: "No providers available" });
+  }
   const { code } = req.body;
 
   // 1. Ask AI
   const plan = await analyzeJob(code);
-  console.log(plan);
+
 
   // 2. Find providers (Redis)
-  const providers = await getAvailableProviders({
+  providers = await getAvailableProviders({
     language: plan.language,
     runtime: plan.runtime,
     memoryMB: plan.requirements.minMemoryMB,
@@ -26,6 +30,7 @@ router.post("/submit", async (req, res)=> {
   if (providers.length === 0) {
     return res.status(503).json({ error: "No providers available" });
   }
+  // console.log("Providers:",providers,plan)
 
   // 3. Return jobId + provider list
   res.json({

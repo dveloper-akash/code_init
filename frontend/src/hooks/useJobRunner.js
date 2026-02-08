@@ -34,10 +34,15 @@ export function useJobRunner() {
       jobId = res.jobId;
       providers = res.providers; // 👈 ARRAY
       plan = res.plan;
-    } catch {
-      setError("Failed to plan job");
+      console.log(res);
+    } catch (err) {
+      const backendMessage =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        "Request failed";
+      setError(backendMessage); // 👈 backend message
       setStatus("error");
-      return;
+      return
     }
 
     for (let i = 0; i < providers.length; i++) {
@@ -76,7 +81,7 @@ export function useJobRunner() {
 
   const tryProvider = ({ provider, jobId, code, plan }) => {
     return new Promise((resolve, reject) => {
-      const socket = connectToProvider(provider.ip);
+      const socket = connectToProvider(provider.address);
       socketRef.current = socket;
 
       let connectionTimer;
