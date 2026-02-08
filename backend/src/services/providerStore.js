@@ -1,28 +1,23 @@
 import redis from "../config/redis.js";
 
-const HEARTBEAT_TTL = 30;   // seconds
-const METRICS_TTL   = 15;   // seconds
+const HEARTBEAT_TTL = 30; // seconds
+const METRICS_TTL = 15;
 
 /* -------------------------------
    REGISTRATION
 --------------------------------*/
-
 export async function registerProvider(id, address, capabilities) {
   await redis.set(`provider:${id}:address`, address);
   await redis.set(`provider:${id}:status`, "IDLE");
 
-  // heartbeat (liveness)
   await redis.set(`provider:${id}:heartbeat`, "alive", {
     EX: HEARTBEAT_TTL,
   });
 
-  // cache capabilities (NO TTL)
-  if (capabilities) {
-    await redis.set(
-      `provider:${id}:capabilities`,
-      JSON.stringify(capabilities)
-    );
-  }
+  await redis.set(
+    `provider:${id}:capabilities`,
+    JSON.stringify(capabilities)
+  );
 
   await redis.sAdd("providers:all", id);
 }
@@ -30,7 +25,6 @@ export async function registerProvider(id, address, capabilities) {
 /* -------------------------------
    HEARTBEAT
 --------------------------------*/
-
 export async function heartbeat(id) {
   await redis.set(`provider:${id}:heartbeat`, "alive", {
     EX: HEARTBEAT_TTL,
@@ -38,9 +32,8 @@ export async function heartbeat(id) {
 }
 
 /* -------------------------------
-   AVAILABILITY
+   STATUS
 --------------------------------*/
-
 export async function setBusy(id) {
   await redis.set(`provider:${id}:status`, "BUSY");
 }
@@ -50,9 +43,8 @@ export async function setIdle(id) {
 }
 
 /* -------------------------------
-   METRICS (HINTS ONLY)
+   METRICS
 --------------------------------*/
-
 export async function updateMetrics(id, metrics) {
   await redis.set(
     `provider:${id}:metrics`,
@@ -62,9 +54,8 @@ export async function updateMetrics(id, metrics) {
 }
 
 /* -------------------------------
-   DISCOVERY WITH JOB FILTERING
+   DISCOVERY
 --------------------------------*/
-
 export async function getAvailableProviders(job) {
   const ids = await redis.sMembers("providers:all");
   const available = [];
@@ -78,33 +69,23 @@ export async function getAvailableProviders(job) {
 
     if (!heartbeat || status !== "IDLE") continue;
 
-    /* ---- Capability filtering ---- */
-    const capRaw = await redis.get(`provider:${id}:capabilities`);
-    if (!capRaw) continue;
+    const capsRaw = await redis.get(`provider:${id}:capabilities`);
+    if (!capsRaw) continue;
 
-    const caps = JSON.parse(capRaw);
+    const caps = JSON.parse(capsRaw);
 
     if (!caps.languages.includes(job.language)) continue;
     if (job.timeout > caps.maxTimeout) continue;
 
-    /* ---- Metrics filtering (optional hints) ---- */
-    if (job.memoryMB) {
-      const metricsRaw = await redis.get(`provider:${id}:metrics`);
-      if (metricsRaw) {
-        const m = JSON.parse(metricsRaw);
-
-        // safety margins (IMPORTANT)
-        if (m.freeRamMB < job.memoryMB * 1.5) continue;
-        if (m.availCpuCores < job.cpuCores) continue;
-        if (m.gpu!==job.gpu ) continue;
-        if (m.gpuFree<job.gpuMemoryMB) continue;
-      }
+    const metricsRaw = await redis.get(`provider:${id}:metrics`);
+    if (metricsRaw) {
+      const m = JSON.parse(metricsRaw);
+      if (job.memoryMB && m.freeRamMB < job.memoryMB * 1.5) continue;
+      if (job.cpuCores && m.availCpuCores < job.cpuCores) continue;
+      if (job.gpu && !m.gpu) continue;
     }
 
-    available.push({
-      providerId: id,
-      address
-    });
+    available.push({ providerId: id, address });
   }
 
   return available;

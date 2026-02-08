@@ -1,24 +1,13 @@
 import { Router } from "express";
-import { submitJob } from "../services/job.service.js";
+// import { submitJob } from "../services/job.service.js";
 
 import { analyzeJob } from "../services/aiAnalyzer.js";
 import { getAvailableProviders } from "../services/providerStore.js";
 
 const router = Router();
 
-<<<<<<< HEAD
 router.post("/submit", async (req, res)=> {
   const { code } = req.body;
-=======
-router.post("/submit", async (req, res) => {
-  try {
-    const job = await submitJob(req.body);
-    res.json(job);
-  } catch (err) {
-    res.status(500).json({ error: "Job submission failed" });
-  }
-});
->>>>>>> 33b8cbeb38cfe2e0b7727006f74c2b7fa2e8207c
 
   // 1. Ask AI
   const plan = await analyzeJob(code);

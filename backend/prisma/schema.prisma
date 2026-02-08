@@ -8,13 +8,14 @@ generator client {
 }
 
 model Provider {
-  id          String   @id
+  id          String   @id @default(uuid())
   name        String?
+  providerId  String?  @unique
   revoked     Boolean  @default(false)
 
   // Capability metadata (SQLite-safe)
   languages   Json?
-  maxTimeout  Int
+  maxTimeout  Int?
   labels      Json?
 
   createdAt   DateTime @default(now())
@@ -23,11 +24,6 @@ model Provider {
   @@map("providers")
 }
 
-model Job {
-  id          String   @id
-  language    String
-  status      String   // PENDING | ASSIGNED | RUNNING | COMPLETED | FAILED
-  createdAt   DateTime @default(now())
-  assignedTo  String?
-}
+
+
 

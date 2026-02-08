@@ -2,7 +2,7 @@ import axios from "axios";
 
 const API_KEY = process.env.OPENROUTER_TOKEN;
 
-export async function aiAnalyzer(code) {
+export async function analyzeJob(code) {
   const systemPrompt = `
 You are a strict job execution planner.
 Return ONLY valid JSON.
