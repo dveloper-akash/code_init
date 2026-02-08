@@ -3,7 +3,9 @@ import shutil
 import subprocess
 import uuid
 import threading
+import json
 from pathlib import Path
+import asyncio
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,7 +33,6 @@ def get_execution_command(language: str):
         fi;
         python code.py
         """
-
     elif language == "node":
         return """
         if [ -f package.json ]; then
@@ -39,7 +40,6 @@ def get_execution_command(language: str):
         fi;
         node code.js
         """
-
     elif language == "go":
         return """
         if [ -f go.mod ]; then
@@ -50,13 +50,15 @@ def get_execution_command(language: str):
 
 
 def run_job(
+    ws,
     language: str,
     code: str,
     dependency_file: str = None,
     cpu_limit: float = 1.0,
     memory_limit: str = "1g",
     gpu_limit: str = "0",
-    timeout_seconds: int = 10
+    timeout_seconds: int = 100000,
+    loop=None  # ✅ receive event loop from main
 ):
     job_id = str(uuid.uuid4())
     job_dir = JOBS_DIR / job_id
@@ -83,7 +85,6 @@ def run_job(
             f"--cpus={cpu_limit}",
             f"--memory={memory_limit}",
             "--pids-limit=100",
-            "--network=none",
             "-v", f"{job_dir}:/workspace",
             "-w", "/workspace",
         ]
@@ -112,6 +113,16 @@ def run_job(
                 print(line, end="")
                 output_lines.append(line)
 
+                if loop:
+                    asyncio.run_coroutine_threadsafe(
+                        ws.send_text(json.dumps({
+                            "type": "job_log",
+                            "job_id": job_id,
+                            "log": line
+                        })),
+                        loop
+                    )
+
         thread = threading.Thread(target=stream_output)
         thread.start()
 
@@ -128,3 +139,4 @@ def run_job(
     finally:
         if job_dir.exists():
             shutil.rmtree(job_dir)
+
