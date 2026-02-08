@@ -5,6 +5,12 @@ import sys
 import psutil
 import GPUtil
 import subprocess
+import threading
+import requests
+import uvicorn
+
+CENTRAL_SERVER_URL = "http://central-server:8000/heartbeat"
+NODE_ID = "node-1"
 
 AGENT_NAME = "GridX Provider Agent"
 AGENT_VERSION = "0.1"
@@ -179,6 +185,14 @@ def shutdown_handler(signum, frame):
 signal.signal(signal.SIGINT, shutdown_handler)
 signal.signal(signal.SIGTERM, shutdown_handler)
 
+def start_ws_server():
+    uvicorn.run(
+        "websocket-service.app.main:app",
+        host="0.0.0.0",
+        port=9000,
+        reload=False
+    )
+
 def main():
     logging.info(f"Starting {AGENT_NAME} v{AGENT_VERSION}")
     logging.info("Provider agent is running")
@@ -190,11 +204,17 @@ def main():
         network = get_network_usage()
 
         offer = {
+            "node_id": NODE_ID,
             "cpu_cores": calculate_cpu_share(cpu),
             "memory_gb": calculate_memory_share(memory),
             "gpu": calculate_gpu_share(gpu),
             "bandwidth": calculate_bandwidth_share(network)
         }
+        
+        try:
+            requests.post(CENTRAL_SERVER_URL, json=offer)
+        except Exception as e:
+            logging.warning("Heartbeat failed")
         
         logging.info(f"Offerable Resources: {offer}")
 
@@ -203,4 +223,11 @@ def main():
 if __name__ == "__main__":
     check_docker()
     pull_images()
+    
+    server_thread = threading.Thread(
+        target=start_ws_server,
+        daemon=True
+    )
+    server_thread.start()
+    
     main()
